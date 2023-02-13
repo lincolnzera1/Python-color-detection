@@ -1,0 +1,61 @@
+import asyncio
+import websockets
+import cv2
+import numpy as np
+import time
+
+async def send_message(uri, message):
+    async with websockets.connect(uri) as websocket:
+        await websocket.send(message)
+        print(f"Sent message: {message}")
+
+
+
+# Capture video from webcam
+cap = cv2.VideoCapture(0)
+
+# Define the range of the color you want to detect
+lower_yellow = np.array([20,100,100])
+upper_yellow = np.array([30,255,255])
+
+while(1):
+    # Capture frame-by-frame
+    ret, frame = cap.read()
+    height, width, _ = frame.shape
+
+    # Convert the frame to HSV color space
+    hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+
+    # Threshold the HSV image to get only the yellow color
+    mask = cv2.inRange(hsv, lower_yellow, upper_yellow)
+
+    # Bitwise-AND mask and original image
+    res = cv2.bitwise_and(frame, frame, mask=mask)
+
+    # Find contours in the mask
+    contours, _ = cv2.findContours(mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+
+    # Draw a rectangle around the yellow color
+    for contour in contours:
+        x, y, w, h = cv2.boundingRect(contour)
+        if w * h > 100: # Only draw rectangles with a certain size
+            cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
+            position = 1.0 - (x + w / 2) / width
+            # print("Position: {:.1f}".format(position))
+            asyncio.run(send_message("ws://localhost:8080", str("{:.1f}".format(position))))
+            
+
+    # Display the resulting frame
+    cv2.imshow('frame', frame)
+    #cv2.imshow('mask', mask)
+    #cv2.imshow('res', res) 
+
+    # Break the loop if 'q' is pressed
+    if cv2.waitKey(1) & 0xFF == ord('q'):
+        break
+
+# Release the capture
+cap.release()
+
+# Destroy all windows
+cv2.destroyAllWindows()
